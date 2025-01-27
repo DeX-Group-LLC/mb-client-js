@@ -1,0 +1,61 @@
+# General Rules for Modifying `src` Files
+
+1. **Document Thoroughly:**
+   - Use JSDocs for functions, classes, and methods. Follow JSDoc style guidelines enforced by ESLint (e.g., `jsdoc/check-alignment`, `jsdoc/check-indentation`).
+   - Add inline comments to explain complex logic.
+2. **Update Unit Tests:**
+    *   Run `ng test` before updating unit tests to check for any existing unit tests that may need to be updated. This will also provide code coverage information to help you determine if you need to add more tests.
+    *   Create new unit tests for any new code added.
+    *   Modify existing unit tests to cover changes made to existing code.
+3. **Update README:** If changes affect repository-level functionality, update the `README.md` file accordingly.
+4. **Use Correct Import Paths:** Always use the defined import paths when importing modules within the project. Do not use relative paths when an alias is available. The available aliases are:
+    *   NONE AT THIS TIME
+    ESLint's `no-restricted-imports` rule will enforce this.
+5. **Organize Imports:**
+    *   **Minimize Imports:** Group imports from the same source into a single import statement whenever possible. For example:
+
+        ```typescript
+        // Instead of:
+        import { Component } from '@angular/core';
+        import { OnInit } from '@angular/core';
+
+        // Do this:
+        import { Component, OnInit } from '@angular/core';
+        ```
+
+    *   **Import Sections:** Organize imports into the following sections, in this order:
+        1. **Angular and `package.json` Dependencies:** Angular modules and dependencies listed in your `package.json`.
+        2. **Custom Paths:** Imports using your defined import aliases (e.g., `@app`, `@env`).
+        3. **Local Paths:** Relative imports from within the same module or a closely related module (e.g., `./my-local-module`).
+
+    *   **Alphabetical Order within Sections:** Within each of the above sections, sort imports alphabetically by the source path.
+
+    *   **Example:**
+
+        ```typescript
+        // Angular and package.json Dependencies
+        import { Component, OnInit } from '@angular/core';
+        import { FormBuilder, FormGroup } from '@angular/forms';
+        import { Observable } from 'rxjs';
+
+        // Custom Paths
+        import { AppConfig } from '@app/config';
+        import { LogService } from '@app/services/log.service';
+        import { MetricsService } from '@app/services/metrics.service';
+
+        // Local Paths
+        import { LogEntry } from './models/log-entry';
+        import { ThemeService } from './services/theme.service';
+        ```
+
+# Specific Rules for Adding/Modifying Unit Tests for a Module
+
+1. **Comprehensive Coverage:** Ensure new unit tests thoroughly cover the functionality of any new code added.
+2. **Test Execution:** Run `ng test` after adding/modifying unit tests to confirm that all unit tests, including new and modified ones, pass successfully.
+3. **JSDocs for Tests:** All unit tests must have JSDoc comments explaining the purpose of the test suite and each test case.
+4. **Inline Comments for Tests:** Use inline comments within test cases to clarify assertions and any complex test logic.
+
+# Updating the .cursorrules File
+
+1. **New Import Paths:** If new import path aliases are added or existing ones are modified, update the **Use
+Correct Import Paths** section to reflect the changes.
