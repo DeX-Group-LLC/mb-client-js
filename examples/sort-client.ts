@@ -21,17 +21,16 @@ export function runSortClient() {
 
         // Subscribe to common.sort.request
         sortClient.subscribe<SortRequestPayload>("request", "common.sort.request", 1, (message) => {
-            let itemCount = message.payload.iata?.length ?? message.payload.barcodes?.length;
             // Check for valid payload
-            if (itemCount === undefined) {
-                console.error("Sort Client: Received sort request with unknown payload format:", message.payload);
-                return;
+            if (!Array.isArray(message.payload.iata) || !Array.isArray(message.payload.barcodes)) {
+                return console.error("Sort Client: Received sort request with unknown payload format:", message.payload);
             }
+
+            // Extract the item count
+            const itemCount = message.payload.iata.length ?? message.payload.barcodes.length;
 
             // Send mock destinations
             message.response({ destinations: Array.from({ length: itemCount }, (_, i) => (i + 1).toString()) });
-        }).catch(error => {
-            console.error("Sort Client: Error subscribing to common.sort.request:", error);
         });
     });
 
