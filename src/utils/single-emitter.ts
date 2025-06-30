@@ -2,9 +2,27 @@
  * Base class providing event emitter functionality.
  * Allows components to subscribe to and emit events.
  */
-export class SingleEmitter<T extends (...args: any[]) => void> {
+export class SingleEmitter<T extends (...args: any[]) => void = (...args: any[]) => void> {
     /** Map storing event listeners for each event type */
     private listeners = new Set<T>();
+
+    /**
+     * Gets the number of listeners.
+     *
+     * @returns The number of listeners
+     */
+    get size(): number {
+        return this.listeners.size;
+    }
+
+    /**
+     * Checks if the emitter has no listeners.
+     *
+     * @returns True if the emitter has no listeners, false otherwise
+     */
+    get empty(): boolean {
+        return this.listeners.size === 0;
+    }
 
     /**
      * Adds a listener for the specified event.

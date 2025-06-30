@@ -13,5 +13,6 @@ export {
 } from './types';
 
 // Utility exports
-export { EventEmitter } from './utils/event-emitter';
+export { SingleEmitter } from './utils/single-emitter';
+export { MultiEmitter } from './utils/multi-emitter';
 export { MessageSerializer } from './serialization/message';

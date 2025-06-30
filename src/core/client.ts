@@ -1,12 +1,15 @@
 import { MessageSerializer } from '../serialization/message';
-import { ActionType, BrokerHeader, ClientHeader, Message, Payload, PendingRequest } from '../types';
+import { ActionType, BrokerHeader, ClientHeader, Message as MessageType, Payload, PayloadSuccess, PendingRequest } from '../types';
 import * as Topic from '../utils/topic';
 import { VERSION } from '../version';
 import { SingleEmitter } from '../utils/single-emitter';
+import { MultiEmitter } from '../utils/multi-emitter';
+import { Message } from './message';
 
 const DEFAULT_TIMEOUT = 10000;
 const DEFAULT_RECONNECT_DELAY = 1000;
 const DEFAULT_MAX_RECONNECT_ATTEMPTS = Infinity;
+const DEFAULT_CALLBACK = (...args: any[]) => {};
 
 /**
  * Configuration options for the client
@@ -31,9 +34,9 @@ export interface ClientConfig {
  * @param version - The version of the protocol to use
  * @param timeout - The timeout for the request in milliseconds
  */
-interface RequestOptions {
+export interface RequestOptions {
     parentRequestId?: string;
-    version: string;
+    version?: string;
     timeout?: number;
 }
 
@@ -45,7 +48,7 @@ interface RequestOptions {
  * @param timeout - The timeout for the request in milliseconds
  * @param withRequestId - Whether to include a request ID
  */
-interface PublishOptions extends RequestOptions {
+export interface PublishOptions extends RequestOptions {
     withRequestId?: boolean;
 }
 
@@ -54,7 +57,8 @@ interface PublishOptions extends RequestOptions {
  */
 export abstract class Client {
     protected isConnected: boolean = false;
-    protected subscriptions: Map<string, (message: Message<ClientHeader, Payload>) => void> = new Map();
+    protected registerInfo: { name: string; description: string } | undefined;
+    protected subscriptions = new Map<string, { callback: (message: Message<ClientHeader, Partial<Payload>>) => void; action: "publish" | "request" | "all"; priority: number }>();
     protected requests: Map<string, PendingRequest> = new Map();
     protected reconnectAttempts: number = 0;
     protected reconnectTimer?: NodeJS.Timeout;
@@ -135,7 +139,7 @@ export abstract class Client {
      * Resets the reconnection state
      * @protected
      */
-    protected handleConnect(): void {
+    protected async handleConnect(): Promise<void> {
         // Clear any existing reconnect timer
         if (this.reconnectTimer) {
             clearTimeout(this.reconnectTimer);
@@ -145,6 +149,21 @@ export abstract class Client {
         // Reset reconnect attempts and update state
         this.reconnectAttempts = 0;
         this.isConnected = true;
+
+        // Re-register info if exists
+        if (this.registerInfo) {
+            await this.register(this.registerInfo.name, this.registerInfo.description);
+        }
+
+        // Resetup subscriptions
+        const promises = [];
+        for (const [topic, { action, priority }] of this.subscriptions.entries()) {
+            // Subscribe to the event
+            promises.push(this.request('system.topic.subscribe', { action, topic, priority }));
+        }
+        await Promise.all(promises);
+
+        // Notify listeners
         this.connected$.emit();
     }
 
@@ -159,24 +178,38 @@ export abstract class Client {
      */
     abstract disconnect(): Promise<void>;
 
-    protected handleMessage(message: string) {
+    protected handleMessage(data: string) {
         try {
-            const deserializedMessage = MessageSerializer.deserialize(message);
+            const deserializedMessage = MessageSerializer.deserialize(data);
+            const message = new Message(this, deserializedMessage.header, deserializedMessage.payload);
+
+            // If heartbeat, send a response
+            if (message.header.topic === "system.heartbeat") {
+                this.response(message, {});
+            }
 
             // Lookup requests
-            if (deserializedMessage.header.requestId) {
-                const request = this.requests.get(deserializedMessage.header.requestId);
+            if (message.header.requestId) {
+                const request = this.requests.get(message.header.requestId);
                 if (request) {
-                    if ((deserializedMessage.payload as any).error) {
-                        request.reject(new Error((deserializedMessage.payload as any).error));
+                    if ((message.payload as any).error) {
+                        request.reject((message.payload as any).error);
                     } else {
-                        request.resolve(deserializedMessage);
+                        request.resolve(message);
                     }
                 }
             }
 
+            // Handle subscriptions
+            const subscription = this.subscriptions.get(message.header.topic);
+            if (subscription) {
+                if (subscription.action === "all" || subscription.action === message.header.action) {
+                    subscription.callback(message);
+                }
+            }
+
             // Emit the message
-            this.message$.emit(deserializedMessage);
+            this.message$.emit(message);
         } catch (error) {
             this.error$.emit(error instanceof Error ? error : new Error('Failed to deserialize message'));
         }
@@ -194,14 +227,14 @@ export abstract class Client {
      * @param payload - The payload to publish
      * @param version - The version of the protocol to use (defaults to the current version)
      */
-    async publish(topic: string, payload: Record<string, any>, options?: PublishOptions) {
+    async publish(topic: string, payload: PayloadSuccess, options?: PublishOptions) {
         // Validate the topic
         if (!Topic.isValid(topic)) throw new Error(`Invalid topic name: ${topic}`);
 
         const requestId = options?.withRequestId ? crypto.randomUUID() : undefined;
 
         // Serialize the message
-        const header = { action: ActionType.PUBLISH, topic, version: options?.version ?? VERSION, requestId, parentRequestId: options?.parentRequestId };
+        const header = { action: ActionType.PUBLISH, topic, version: options?.version ?? VERSION, requestId, parentRequestId: options?.parentRequestId, timeout: options?.timeout };
         const message = MessageSerializer.serialize(header, payload);
 
         return new Promise((resolve, reject) => {
@@ -239,7 +272,7 @@ export abstract class Client {
      * @param timeout - The timeout for the request in milliseconds (defaults to no timeout)
      * @returns The response message
      */
-    async request(topic: string, payload: Record<string, any>, options?: RequestOptions): Promise<Message<BrokerHeader, Payload>> {
+    async request(topic: string, payload: PayloadSuccess, options?: RequestOptions): Promise<Message<BrokerHeader, Payload>> {
         // Validate the topic
         if (!Topic.isValid(topic)) throw new Error(`Invalid topic name: ${topic}`);
 
@@ -247,7 +280,7 @@ export abstract class Client {
         const requestId = crypto.randomUUID();
 
         // Serialize the message
-        const header = { action: ActionType.PUBLISH, topic, version: options?.version ?? VERSION, requestId, parentRequestId: options?.parentRequestId };
+        const header = { action: ActionType.REQUEST, topic, version: options?.version ?? VERSION, requestId, parentRequestId: options?.parentRequestId, timeout: options?.timeout };
         const message = MessageSerializer.serialize(header, payload);
 
         // Add the request to the map
@@ -272,31 +305,56 @@ export abstract class Client {
         });
     }
 
+    async response(message: Message<BrokerHeader | ClientHeader, Payload>, payload: Payload): Promise<void> {
+        // Validate the topic
+        if (!Topic.isValid(message.header.topic)) throw new Error(`Invalid topic name: ${message.header.topic}`);
+
+        // Serialize the message
+        const header = { ...message.header, action: ActionType.RESPONSE };
+        const response = MessageSerializer.serialize(header, payload);
+
+        // Send the message
+        // TODO: Handle failures
+        this.send(response);
+    }
+
     /**
      * Registers a new topic
      * @param name - The name of the topic
      * @param description - The description of the topic
      */
     async register(name: string, description: string, options?: RequestOptions): Promise<Message<BrokerHeader, Payload>> {
+        this.registerInfo = { name, description };
         return this.request('system.service.register', { name, description }, options);
     }
 
     /**
      * Subscribes to a topic
      * @param topic - The topic to subscribe to
+     * @param action - The action to subscribe to
      * @param priority - The priority of the subscription (defaults to 0)
      * @param options - The options for the subscription
      * @returns The response message
      */
-    async subscribe(topic: string, priority: number = 0, options?: RequestOptions): Promise<Message<BrokerHeader, Payload>> {
-        return this.request('system.topic.subscribe', { topic, priority }, options);
+    async subscribe<P extends Payload>(action: "publish" | "request" | "all", topic: string, priority: number = 0, callback: (message: Message<BrokerHeader, Partial<P>>) => void = DEFAULT_CALLBACK): Promise<void> {
+        const existing = this.subscriptions.get(topic);
+        if (!existing || existing.action != action || existing.priority != priority) {
+            // Update subscription
+            this.subscriptions.set(topic, { action, priority, callback: callback as any });
+            // Subscribe to the topic
+            await this.request('system.topic.subscribe', { action, topic, priority });
+        }
     }
 
     /**
      * Unsubscribes from a topic
      * @param topic - The topic to unsubscribe from
      */
-    async unsubscribe(topic: string, options?: RequestOptions): Promise<Message<BrokerHeader, Payload>> {
-        return this.request('system.topic.unsubscribe', { topic }, options);
+    async unsubscribe(topic: string): Promise<void> {
+        // Remove the subscription
+        if (this.subscriptions.delete(topic)) {
+            // Unsubscribe from the topic
+            await this.request('system.topic.unsubscribe', { topic });
+        }
     }
 }

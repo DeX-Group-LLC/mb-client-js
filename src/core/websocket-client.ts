@@ -31,8 +31,12 @@ export class WebSocketClient extends Client {
                 this.ws = new WebSocket(config.url);
 
                 this.ws.onopen = () => {
-                    this.handleConnect();
-                    resolve();
+                    this.handleConnect().then(() => {
+                        resolve();
+                    }).catch((error) => {
+                        this.ws?.close();
+                        reject(error);
+                    });
                 };
 
                 this.ws.onclose = () => {
@@ -60,7 +64,6 @@ export class WebSocketClient extends Client {
 
         return new Promise((resolve) => {
             this.ws!.onclose = () => {
-                this.handleDisconnect();
                 resolve();
             };
 

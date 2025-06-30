@@ -1,0 +1,76 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Commit Message Style Guide
+
+This guide outlines the preferred style for writing Git commit messages for this project. Adhering to this style ensures consistency, clarity, and helps in automating processes like changelog generation.
+
+## General Structure
+
+A commit message should generally follow this structure:
+
+```
+<type>: <Subject line, capitalized, concise>
+
+[Optional blank line]
+
+[Optional longer description, explaining what and why. Use bullet points for clarity.]
+```
+
+## 1. Type Prefix
+
+Prefix every commit message with a type, followed by a colon and a space. The type should be **lowercase**. This prefix categorizes the commit.
+
+Common types include:
+
+*   **`feat:`**: A new feature or capability is introduced.
+*   **`fix:`**: A bug fix.
+*   **`refactor:`**: Code changes that neither fix a bug nor add a feature (e.g., restructuring code, renaming variables).
+*   **`docs:`**: Changes to documentation only.
+*   **`style:`**: Changes that do not affect the meaning of the code (white-space, formatting, missing semi-colons, etc.).
+*   **`test:`**: Adding missing tests or correcting existing tests.
+*   **`chore:`**: Changes to the build process or auxiliary tools and libraries such as documentation generation.
+
+**Example Prefix Usage:**
+`feat: ...`
+`refactor: ...`
+
+## 2. Subject Line
+
+*   The subject line follows the `type: ` prefix.
+*   It should be a concise summary of the change.
+*   **Capitalize the first letter** of the subject.
+*   Do not end the subject line with a period.
+*   Aim for clarity and descriptiveness. While the imperative mood (e.g., "Add feature X") can be used, a descriptive summary (e.g., "Enhance attack signaling") is also acceptable and aligns with project examples.
+
+**Good Subject Examples:**
+*   `feat: Add user authentication via OAuth`
+*   `fix: Prevent crash when an empty list is processed`
+*   `refactor: Simplify an algorithm in the payment processing module`
+*   `docs: Update README with new setup instructions`
+
+## 3. Body (Optional)
+
+*   If the change is non-trivial, provide a more detailed explanation in the body of the commit message.
+*   Separate the subject line from the body with a **blank line**.
+*   Explain the **what** and **why** of the change, not just the "how" (which the code itself shows).
+*   Use **bullet points (`-` or `*`)** for multiple distinct points or to list changes, keeping them concise and direct.
+*   Wrap lines in the body at around 72 characters if writing manually (though many tools handle this).
+
+## Example of a Full Commit Message
+
+```
+feat: Enhance attack signaling in CharacterInstance and AttackButton
+
+- Introduced `attack_started` and `attack_ended` signals in CharacterInstance.
+- Connected AttackButton to new signals for improved state management during attacks.
+- Refactored related methods for clarity and better response to attack events.
+```
+
+## General Philosophy
+
+*   **Clarity and Conciseness**: Write messages that are easy to understand but don't include unnecessary detail.
+*   **Informative**: Messages should help others (and your future self) understand the reason for the change without needing to diff the code immediately.
+*   **Consistency**: Adhering to this style across all commits makes the project history much more manageable and useful.
