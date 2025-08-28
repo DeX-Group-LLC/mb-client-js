@@ -34,7 +34,7 @@
     },
     "dependencies": {
         "semver": "^7.6.3",
-        "uuid": "^9.0.0"
+        "uuid": "^11.1.0"
     },
     "devDependencies": {
         "@types/jest": "^29.5.0",
